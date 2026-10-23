@@ -1,0 +1,31 @@
+# === Backend (Java / Maven / Spring Boot) ===
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+*.log
+
+# === Frontend (Node / Next.js) ===
+node_modules/
+.next/
+out/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# === Variáveis de Ambiente e Chaves (Segurança) ===
+.env
+.env.*
+!.env.example
+
+# === IDEs e Sistema Operacional ===
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
