@@ -16,7 +16,7 @@
 | Missão / Módulo | Status Atual | Última Atualização | Verificação (`mvn test` / `build`) |
 | :--- | :--- | :--- | :--- |
 | **Planejamento & Especificação (`/docs`)** | `COMPLETED` | Setup Inicial | N/A |
-| **Missão 1: Fundação Backend, JPA Dual & Extrator AST** | `PENDING` | Aguardando execução | Pendente |
+| **Missão 1: Fundação Backend, JPA Dual & Extrator AST** | `COMPLETED` | 2026-10-23 | `.\mvnw.cmd clean test`: 11 testes, 0 falhas — BUILD SUCCESS |
 | **Missão 2: Ingestão RAM, Orquestrador LLM & API REST** | `PENDING` | Aguardando execução | Pendente |
 | **Missão 3: Frontend Client-First (`shadcn/ui` + `JSZip`)** | `PENDING` | Aguardando execução | Pendente |
 | **Missão 4: Integração E2E & Validação no Browser** | `PENDING` | Aguardando execução | Pendente |
@@ -63,13 +63,15 @@ flowchart LR
 
 | Pacote / Classe | Camada | Responsabilidade Principal | Dependências Principais | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| `com.springdocai.SpringDocAiApplication` | Bootstrap | Classe principal de inicialização do Spring Boot. | `SpringApplication` | `PLANNED` |
-| `com.springdocai.domain.entity.GenerationJob` | Domain / Entity | Entidade JPA que representa um job de geração e suas métricas. | `GeneratedDocument` | `PLANNED` |
-| `com.springdocai.domain.entity.GeneratedDocument` | Domain / Entity | Entidade JPA que armazena cada um dos 3 arquivos `.md` gerados. | `GenerationJob` | `PLANNED` |
-| `com.springdocai.repository.GenerationJobRepository` | Repository | Persistência e consulta das últimas 20 gerações. | `JpaRepository` | `PLANNED` |
-| `com.springdocai.repository.GeneratedDocumentRepository` | Repository | Consulta dos documentos `.md` vinculados a um `jobId`. | `JpaRepository` | `PLANNED` |
-| `com.springdocai.ast.dto.ProjectAstSummary` | AST / DTO | Records imutáveis que representam a AST enxuta extraída do projeto. | Java Records | `PLANNED` |
-| `com.springdocai.ast.service.JavaParserAstExtractorService` | AST / Service | Motor `JavaParser` que extrai Controllers, Services, DTOs e Entities em RAM. | `javaparser-core` | `PLANNED` |
+| `com.springdocai.SpringDocAiApplication` | Bootstrap | Classe principal de inicialização do Spring Boot. | `SpringApplication` | `IMPLEMENTED` |
+| `com.springdocai.domain.entity.GenerationJob` | Domain / Entity | Entidade JPA que representa um job de geração e suas métricas. | Lombok, Hibernate `@CreationTimestamp` | `IMPLEMENTED` |
+| `com.springdocai.domain.entity.GeneratedDocument` | Domain / Entity | Entidade JPA que armazena cada um dos 3 arquivos `.md` gerados (`@ManyToOne LAZY` para o job). | `GenerationJob` | `IMPLEMENTED` |
+| `com.springdocai.domain.enums.SourceType` / `JobStatus` / `DocumentType` | Domain / Enum | Enums persistidos via `@Enumerated(STRING)`. | — | `IMPLEMENTED` |
+| `com.springdocai.repository.GenerationJobRepository` | Repository | `findTop20ByOrderByCreatedAtDesc()` — últimas 20 gerações. | `JpaRepository` | `IMPLEMENTED` |
+| `com.springdocai.repository.GeneratedDocumentRepository` | Repository | `findByJobId(UUID)` — documentos `.md` de um job. | `JpaRepository` | `IMPLEMENTED` |
+| `com.springdocai.ast.dto.ProjectAstSummary` | AST / DTO | Record raiz + records aninhados: `BuildInfo`, `ControllerInfo`, `EndpointInfo`, `ParameterInfo`, `ServiceInfo`, `ServiceMethodInfo`, `TypeInfo`, `EntityInfo`, `FieldInfo`. | Java Records | `IMPLEMENTED` |
+| `com.springdocai.ast.service.JavaParserAstExtractorService` | AST / Service | `extract(Map<String,String> files)`: motor `JavaParser` (JAVA_21) que extrai Controllers, Services, DTOs e Entities 100% em RAM. | `javaparser-core` 3.26.2 | `IMPLEMENTED` |
+| `com.springdocai.ast.exception.NoEndpointsFoundException` | AST / Exception | Lançada no EC01 (0 endpoints) com a mensagem amigável do PRD. | `RuntimeException` | `IMPLEMENTED` |
 | `com.springdocai.service.GithubTarballInMemoryService` | Ingestion / Service | Baixa o tarball de repositório público do GitHub em `InputStream` na RAM. | `HttpClient` / `TarArchiveInputStream` | `PLANNED` |
 | `com.springdocai.service.LlmPromptOrchestratorService` | LLM / Service | Executa os 3 prompts de sistema (`API-REFERENCE`, `INTEGRATION-GUIDE`, `ARCHITECTURE`). | `RestClient` / Spring AI | `PLANNED` |
 | `com.springdocai.controller.GenerationController` | Web / REST | Endpoints REST para iniciar geração, consultar job e listar histórico. | `GenerationWorkflowService` | `PLANNED` |
@@ -118,7 +120,7 @@ erDiagram
 ```
 
 ### Migrations Flyway Registradas (`/backend/src/main/resources/db/migration`)
-* **`V1__create_tables.sql`**: Criação das tabelas `generation_jobs` e `generated_documents` + índices `idx_generation_jobs_created_at` e `idx_generated_documents_job_id`. *(Status: `PLANNED`)*
+* **`V1__create_tables.sql`**: Criação das tabelas `generation_jobs` e `generated_documents` + índices `idx_generation_jobs_created_at` e `idx_generated_documents_job_id`. *(Status: `IMPLEMENTED`; só ativa no perfil `prod` — `dev`/`test` usam `ddl-auto: create-drop` com Flyway desabilitado)*
 
 ---
 
@@ -158,6 +160,19 @@ erDiagram
 ## 7. Registro de Decisões Arquiteturais (ADRs)
 *(Agente: Sempre que tomar uma decisão de implementação importante, adicione um novo bloco `ADR-00X` abaixo)*
 
+### ADR-005: Compatibilidade de build com JDK 23 local (target Java 21)
+* **Data:** 2026-10-23
+* **Status:** Aceito
+* **Contexto:** A máquina de desenvolvimento usa JDK 23; o projeto exige Java 21. Compilar com `java.version=23` quebra ByteBuddy/Mockito e o Lombok default do Boot 3.3.5 pode não suportar o javac 23.
+* **Decisão:** `java.version=21` com `maven-compiler-plugin` usando `<release>21</release>`; `lombok.version=1.18.36` (propriedade que também governa a dependência gerenciada pelo Boot) e `annotationProcessorPaths` explícito para o Lombok. Adicionados `backend/mvnw.cmd` (script mínimo: usa `mvn` global ou baixa Maven 3.9.9 em `%USERPROFILE%\.m2\wrapper`) e `.mvn/wrapper/maven-wrapper.properties`.
+* **Consequências:** Bytecode Java 21 gerado por JDK 23; o `mvnw.cmd` é um bootstrap caseiro, não o Maven Wrapper oficial.
+
+### ADR-004: Resolução sintática sem SymbolSolver, DTOs por fecho transitivo
+* **Data:** 2026-10-23
+* **Status:** Aceito
+* **Decisão:** O extrator usa apenas o AST puro (sem `JavaSymbolSolver`) e um índice `nome simples -> TypeDeclaration`. DTOs = records, classes `*DTO/*Request/*Response`, `@Data`/`@Value` e todo tipo alcançável por campos a partir dos tipos de request/response dos endpoints. EC03: qualquer tipo genérico fora de `List/Set/Collection/Iterable/Page/Slice/Map/Flux/Stream` é tratado como envelope e desempacotado pelo 1º argumento (`ResponseEntity<ApiResponse<X>>` → `X`; `List<X>` é preservado). Rotas herdadas de classe base abstrata são resolvidas pelo índice.
+* **Consequências:** Rápido e sem classpath; limitação: classes homônimas em pacotes diferentes colidem no índice (primeira vence).
+
 ### ADR-001: Extração Sintática via JavaParser em Memória vs. Envio de Código Bruto para LLM
 * **Data:** Setup Inicial
 * **Status:** Aceito
@@ -183,6 +198,29 @@ erDiagram
 
 ## 8. Changelog Técnico de Implementação (Histórico Contínuo)
 *(Agente: Adicione sempre uma nova entrada no TOPO desta lista a cada missão ou alteração concluída)*
+
+### [Missão 1 / Verificação] — Testes verdes e correção do annotationProcessorPaths
+* **Data:** 2026-10-23
+* **Arquivos Modificados:** `backend/pom.xml`
+* **Resumo Técnico:** A 1ª execução falhou em `testCompile` (`builder()`/getters ausentes) porque o bloco `maven-compiler-plugin` com `annotationProcessorPaths` do Lombok não estava presente no `pom.xml` (edição anterior perdida). Bloco restaurado (`release=${java.version}`, Lombok `${lombok.version}`).
+* **Verificação / Testes:** `.\mvnw.cmd clean test` → **BUILD SUCCESS**, `Tests run: 11, Failures: 0, Errors: 0` (8 do extrator AST + 3 do repositório).
+
+### [Missão 1 / Atualização] — Compatibilidade de build com JDK 23
+* **Data:** 2026-10-23
+* **Arquivos Modificados/Criados:** `backend/pom.xml`, `backend/mvnw.cmd`, `backend/.mvn/wrapper/maven-wrapper.properties`
+* **Resumo Técnico:** `java.version` 21 + `<release>`, `lombok.version` 1.18.36 e `annotationProcessorPaths` do Lombok. Ver ADR-005.
+* **Verificação / Testes:** ⚠️ `mvn clean test` / `.\mvnw.cmd clean test` **ainda NÃO executados** pelo agente: o terminal falha com `exec: "...\powershell": executable file not found in %PATH%`. A Missão 1 continua `IMPLEMENTED_PENDING_VERIFICATION` até o usuário rodar os testes.
+
+### [Missão 1] — Fundação Backend, Persistência Dual e Extrator AST
+* **Data:** 2026-10-23
+* **Arquivos Criados:**
+  * `backend/pom.xml` (Spring Boot 3.3.5, Java 21, javaparser-core 3.26.2, H2, PostgreSQL, Flyway + `flyway-database-postgresql`, Lombok, Validation)
+  * `backend/src/main/resources/application.yml`, `application-dev.yml`, `application-prod.yml`, `db/migration/V1__create_tables.sql`
+  * `backend/src/test/resources/application-test.yml`
+  * `SpringDocAiApplication`, entidades `GenerationJob`/`GeneratedDocument`, enums `SourceType`/`JobStatus`/`DocumentType`, repositórios, `ProjectAstSummary`, `JavaParserAstExtractorService`, `NoEndpointsFoundException`
+  * Testes: `GenerationJobRepositoryTest` (`@DataJpaTest`, H2), `JavaParserAstExtractorServiceTest` (8 casos: endpoints, EC01, EC02, EC03, herança de rotas, services/exceções, entities/manifest, arquivos inválidos/de teste)
+* **Resumo Técnico:** Perfil ativo padrão `dev` (H2 `MODE=PostgreSQL`, console `/h2-console`, `create-drop`, Flyway off); `prod` usa PostgreSQL + Flyway + `ddl-auto: validate`. Extrator opera sobre `Map<String,String>` em memória (sem I/O de disco), ignora `src/test/` e arquivos não parseáveis. Ver ADR-004.
+* **Verificação / Testes:** ⚠️ `mvn clean test` **NÃO foi executado**: o terminal do agente falhou com `exec: "...\powershell": executable file not found in %PATH%`. Código escrito sem compilação verificada; executar `mvn clean test` em `/backend` e, com BUILD SUCCESS, alterar a Missão 1 para `COMPLETED`.
 
 ### [Setup Inicial] — Baseline de Especificação e Arquitetura
 * **Data:** Setup Inicial do Projeto
