@@ -8,3 +8,15 @@ spring:
 
 server:
   port: 8080
+
+springdocai:
+  llm:
+    # Chave padrão (opcional). Sem chave padrão e sem header X-LLM-API-Key => modo MOCK.
+    api-key: ${LLM_API_KEY:}
+    # Qualquer endpoint compatível com a API OpenAI Chat Completions.
+    base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
+    model: ${LLM_MODEL:gpt-4o-mini}
+    timeout-seconds: 120
+    retry:
+      max-attempts: 3
+      initial-delay-ms: 1000

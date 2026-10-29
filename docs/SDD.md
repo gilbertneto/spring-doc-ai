@@ -17,7 +17,7 @@
 | :--- | :--- | :--- | :--- |
 | **Planejamento & Especificação (`/docs`)** | `COMPLETED` | Setup Inicial | N/A |
 | **Missão 1: Fundação Backend, JPA Dual & Extrator AST** | `COMPLETED` | 2026-10-23 | `.\mvnw.cmd clean test`: 11 testes, 0 falhas — BUILD SUCCESS |
-| **Missão 2: Ingestão RAM, Orquestrador LLM & API REST** | `PENDING` | Aguardando execução | Pendente |
+| **Missão 2: Ingestão RAM, Orquestrador LLM & API REST** | `COMPLETED` | 2026-10-29 | `mvnw clean test`: 43 testes, 0 falhas — BUILD SUCCESS |
 | **Missão 3: Frontend Client-First (`shadcn/ui` + `JSZip`)** | `PENDING` | Aguardando execução | Pendente |
 | **Missão 4: Integração E2E & Validação no Browser** | `PENDING` | Aguardando execução | Pendente |
 
@@ -69,12 +69,23 @@ flowchart LR
 | `com.springdocai.domain.enums.SourceType` / `JobStatus` / `DocumentType` | Domain / Enum | Enums persistidos via `@Enumerated(STRING)`. | — | `IMPLEMENTED` |
 | `com.springdocai.repository.GenerationJobRepository` | Repository | `findTop20ByOrderByCreatedAtDesc()` — últimas 20 gerações. | `JpaRepository` | `IMPLEMENTED` |
 | `com.springdocai.repository.GeneratedDocumentRepository` | Repository | `findByJobId(UUID)` — documentos `.md` de um job. | `JpaRepository` | `IMPLEMENTED` |
-| `com.springdocai.ast.dto.ProjectAstSummary` | AST / DTO | Record raiz + records aninhados: `BuildInfo`, `ControllerInfo`, `EndpointInfo`, `ParameterInfo`, `ServiceInfo`, `ServiceMethodInfo`, `TypeInfo`, `EntityInfo`, `FieldInfo`. | Java Records | `IMPLEMENTED` |
+| `com.springdocai.ast.dto.ProjectAstSummary` | AST / DTO | Record raiz + records aninhados: `BuildInfo`, `ControllerInfo`, `EndpointInfo`, `ParameterInfo`, `ServiceInfo`, `ServiceMethodInfo`, `TypeInfo`, `EntityInfo`, `FieldInfo`; campo `packages` (pacotes detectados) adicionado na Missão 2. `DocumentType` ganhou `getFileName()`. | Java Records | `IMPLEMENTED` |
 | `com.springdocai.ast.service.JavaParserAstExtractorService` | AST / Service | `extract(Map<String,String> files)`: motor `JavaParser` (JAVA_21) que extrai Controllers, Services, DTOs e Entities 100% em RAM. | `javaparser-core` 3.26.2 | `IMPLEMENTED` |
 | `com.springdocai.ast.exception.NoEndpointsFoundException` | AST / Exception | Lançada no EC01 (0 endpoints) com a mensagem amigável do PRD. | `RuntimeException` | `IMPLEMENTED` |
-| `com.springdocai.service.GithubTarballInMemoryService` | Ingestion / Service | Baixa o tarball de repositório público do GitHub em `InputStream` na RAM. | `HttpClient` / `TarArchiveInputStream` | `PLANNED` |
-| `com.springdocai.service.LlmPromptOrchestratorService` | LLM / Service | Executa os 3 prompts de sistema (`API-REFERENCE`, `INTEGRATION-GUIDE`, `ARCHITECTURE`). | `RestClient` / Spring AI | `PLANNED` |
-| `com.springdocai.controller.GenerationController` | Web / REST | Endpoints REST para iniciar geração, consultar job e listar histórico. | `GenerationWorkflowService` | `PLANNED` |
+| `com.springdocai.service.GithubTarballInMemoryService` | Ingestion / Service | `parse(url)` e `download(url)`: baixa o repositório público via `GET /repos/{o}/{r}/zipball[/{branch}]` (API do GitHub) como `InputStream` e o lê com `ZipInputStream` em RAM (`readZip`), mantendo só `.java` de produção e `pom.xml`/`build.gradle` da raiz. Limites: 1 MB/arquivo, 50 MB total. Record `GithubRepoRef(owner, repo, branch)`. | `java.net.http.HttpClient`, `ZipInputStream` | `IMPLEMENTED` |
+| `com.springdocai.service.GithubIngestionException` | Ingestion / Exception | Falha de download/leitura do GitHub (→ HTTP 422). | `RuntimeException` | `IMPLEMENTED` |
+| `com.springdocai.service.LlmPromptOrchestratorService` | LLM / Service | `generate(DocumentType, ProjectAstSummary, headerKey)`: resolve chave (header BYOK > `LLM_API_KEY` > modo MOCK), monta o prompt com o JSON do `ProjectAstSummary` e aplica retentativa com backoff exponencial (EC04). | `LlmClient`, `MockDocumentGenerator`, `LlmProperties`, `ObjectMapper` | `IMPLEMENTED` |
+| `com.springdocai.service.GenerationWorkflowService` | Workflow / Service | `start(...)`: cria o job, extrai a AST (síncrono, EC01 → job `FAILED`) e agenda `generateDocuments` no executor assíncrono; salva cada documento ao concluir. Consultas: `findJob`, `findDocuments`, `history`. | repositórios, `JavaParserAstExtractorService`, `LlmPromptOrchestratorService`, `TaskExecutor generationExecutor` | `IMPLEMENTED` |
+| `com.springdocai.llm.LlmClient` / `OpenAiCompatibleLlmClient` | LLM / Client | Contrato de chamada à LLM e implementação `POST {baseUrl}/chat/completions` (compatível com OpenAI) via `RestClient`; 429/5xx/rede = retentável; demais = não retentável. | `RestClient` | `IMPLEMENTED` |
+| `com.springdocai.llm.LlmClientConfig` | LLM / Config | Beans `llmRestClient` (timeouts) e `generationExecutor` (`ThreadPoolTaskExecutor` 2–4 threads, fila 50). | Spring | `IMPLEMENTED` |
+| `com.springdocai.llm.LlmProperties` | LLM / Config | `@ConfigurationProperties("springdocai.llm")`: `api-key`, `base-url`, `model`, `timeout-seconds`, `retry.max-attempts`, `retry.initial-delay-ms`. | Lombok | `IMPLEMENTED` |
+| `com.springdocai.llm.LlmPrompts` | LLM / Prompts | Os 3 prompts de sistema (ver 6.3). | `DocumentType` | `IMPLEMENTED` |
+| `com.springdocai.llm.MockDocumentGenerator` | LLM / Fallback | Gera os 3 `.md` de forma determinística a partir da AST quando não há chave (modo MOCK). | `ObjectMapper` | `IMPLEMENTED` |
+| `com.springdocai.llm.LlmApiException` / `LlmGenerationException` | LLM / Exception | Falha de uma chamada HTTP (com `statusCode`/`retryable`) e falha definitiva de um documento (com `documentType`/`attempts`). | `RuntimeException` | `IMPLEMENTED` |
+| `com.springdocai.controller.GenerationController` | Web / REST | Endpoints REST `upload`, `github`, `history` e `{jobId}` (Seção 5). | `GenerationWorkflowService`, `GithubTarballInMemoryService` | `IMPLEMENTED` |
+| `com.springdocai.controller.GlobalExceptionHandler` / `JobNotFoundException` | Web / Advice | Mapeia exceções para `ErrorResponse{error,message}` (400/404/422). | Spring MVC | `IMPLEMENTED` |
+| `com.springdocai.controller.dto.*` | Web / DTO | `UploadGenerationRequest`, `GithubGenerationRequest`, `GenerationJobResponse`, `GenerationDetailResponse`, `GeneratedDocumentResponse`, `ErrorResponse`. | Jakarta Validation | `IMPLEMENTED` |
+| `com.springdocai.config.CorsConfig` | Config | CORS em `/api/**` para `http://localhost:3000` (GET, POST, OPTIONS; expõe `Location`). | `WebMvcConfigurer` | `IMPLEMENTED` |
 
 ### 3.2 Frontend (`/frontend` — Next.js + TypeScript + `shadcn/ui`)
 
@@ -127,12 +138,78 @@ erDiagram
 ## 5. Contratos de API REST (Frontend <-> Backend)
 *(Agente: Documente aqui todos os endpoints implementados, headers obrigatórios, códigos HTTP e exemplos de payload)*
 
-| Método | Rota | Descrição | Headers Suportados | Status HTTP Esperados | Status |
+| Método | Rota | Descrição | Headers Suportados | Status HTTP | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/generations/github` | Inicia geração a partir de URL pública do GitHub. | `X-LLM-API-Key` (opcional) | `201 Created`, `400 Bad Request`, `422 Unprocessable Entity` | `PLANNED` |
-| `POST` | `/api/v1/generations/upload` | Inicia geração a partir do mapa de arquivos `.java` pré-filtrados no cliente. | `X-LLM-API-Key` (opcional) | `201 Created`, `400 Bad Request`, `422 Unprocessable Entity` | `PLANNED` |
-| `GET` | `/api/v1/generations/{jobId}` | Retorna o status do Job, métricas da AST e os 3 documentos `.md` quando concluído. | `Accept: application/json` | `200 OK`, `404 Not Found` | `PLANNED` |
-| `GET` | `/api/v1/generations` | Lista o resumo das últimas 20 gerações para o Drawer de Histórico. | `Accept: application/json` | `200 OK` | `PLANNED` |
+| `POST` | `/api/v1/generations/github` | Baixa o repositório público em RAM, extrai a AST e inicia a geração assíncrona. | `X-LLM-API-Key` (opcional) | `201`, `400` (URL inválida), `422` (EC01 ou falha no GitHub) | `IMPLEMENTED` |
+| `POST` | `/api/v1/generations/upload` | Inicia geração a partir do mapa de arquivos pré-filtrados no cliente. | `X-LLM-API-Key` (opcional) | `201`, `400` (validação/JSON), `422` (EC01) | `IMPLEMENTED` |
+| `GET` | `/api/v1/generations/{jobId}` | Status do job, métricas da AST e documentos gerados até o momento. | — | `200`, `404`, `400` (UUID inválido) | `IMPLEMENTED` |
+| `GET` | `/api/v1/generations/history` | Últimos 20 jobs (`findTop20ByOrderByCreatedAtDesc`). *(Substitui a rota planejada `GET /api/v1/generations`.)* | — | `200` | `IMPLEMENTED` |
+
+**Fluxo:** o `POST` responde `201` com o job em `GENERATING_DOCS` assim que a AST é extraída (a extração é síncrona); os 3 documentos são gerados em segundo plano. O cliente faz *polling* em `GET /{jobId}` até `status` ser `COMPLETED` ou `FAILED`. Ciclo de `status`: `PARSING_AST` → `GENERATING_DOCS` → `COMPLETED` | `FAILED`.
+
+**Modos de chave LLM:** header `X-LLM-API-Key` (BYOK) > variável `LLM_API_KEY` > **modo MOCK** (documentos montados localmente, marcados com aviso). Endpoint configurável por `LLM_BASE_URL` / `LLM_MODEL` (API compatível com OpenAI). A chave nunca é logada nem persistida.
+
+**CORS:** `/api/**` aceita apenas a origem `http://localhost:3000` (GET, POST, OPTIONS).
+
+#### `POST /api/v1/generations/upload`
+Request (`Content-Type: application/json`; `projectName` obrigatório ≤ 255 chars; `files` não vazio, ≤ 5000 entradas):
+```json
+{
+  "projectName": "erp-api",
+  "files": {
+    "pom.xml": "<project>...</project>",
+    "src/main/java/com/acme/web/OrderController.java": "package com.acme.web; ..."
+  }
+}
+```
+Response `201 Created` + header `Location: /api/v1/generations/{id}`:
+```json
+{
+  "id": "11111111-1111-1111-1111-111111111111",
+  "projectName": "erp-api",
+  "sourceType": "ZIP_UPLOAD",
+  "repositoryUrl": null,
+  "status": "GENERATING_DOCS",
+  "endpointsCount": 3,
+  "classesAnalyzedCount": 7,
+  "errorMessage": null,
+  "createdAt": "2026-10-29T18:30:00.123",
+  "completedAt": null
+}
+```
+
+#### `POST /api/v1/generations/github`
+Request: `{ "repositoryUrl": "https://github.com/acme/erp-api" }` (aceita `.git` e `/tree/{branch}`; somente `https://github.com/{owner}/{repo}`). Response: igual ao upload, com `sourceType: "GITHUB_URL"` e `repositoryUrl` preenchido.
+
+#### `GET /api/v1/generations/{jobId}`
+Response `200 OK` (`documents` ordenados: `API_REFERENCE`, `INTEGRATION_GUIDE`, `ARCHITECTURE_OVERVIEW`; vazio enquanto nada foi concluído; preserva os já gerados se o job falhar — EC04):
+```json
+{
+  "id": "…", "projectName": "erp-api", "sourceType": "ZIP_UPLOAD", "repositoryUrl": null,
+  "status": "COMPLETED", "endpointsCount": 3, "classesAnalyzedCount": 7,
+  "errorMessage": null, "createdAt": "…", "completedAt": "…",
+  "documents": [
+    { "docType": "API_REFERENCE", "fileName": "API-REFERENCE.md", "content": "# API Reference …" },
+    { "docType": "INTEGRATION_GUIDE", "fileName": "INTEGRATION-GUIDE.md", "content": "…" },
+    { "docType": "ARCHITECTURE_OVERVIEW", "fileName": "ARCHITECTURE.md", "content": "…" }
+  ]
+}
+```
+
+#### `GET /api/v1/generations/history`
+Response `200 OK`: array de até 20 objetos no formato do `201` acima (mais recentes primeiro).
+
+#### Erros (`ErrorResponse`)
+```json
+{ "error": "NO_ENDPOINTS_FOUND", "message": "Nenhum endpoint Spring Web (@RestController) foi encontrado neste projeto." }
+```
+| HTTP | `error` | Quando |
+| :--- | :--- | :--- |
+| `400` | `VALIDATION_ERROR` | Bean Validation falhou (mensagem `campo: motivo; ...`). |
+| `400` | `BAD_REQUEST` | JSON malformado, UUID inválido ou URL do GitHub inválida. |
+| `404` | `JOB_NOT_FOUND` | `jobId` inexistente. |
+| `422` | `NO_ENDPOINTS_FOUND` | EC01 (o job é gravado como `FAILED`). |
+| `422` | `GITHUB_INGESTION_FAILED` | Repo não encontrado/privado, rate limit, zip inválido ou > 50 MB. |
 
 ---
 
@@ -155,10 +232,34 @@ erDiagram
 2. **`INTEGRATION-GUIDE.md`:** Focado em casos de uso de negócio passo a passo (ordem lógica de chamada dos endpoints para integradores de ERP) com exemplos `cURL`.
 3. **`ARCHITECTURE.md`:** Focado na visão macro dos pacotes, fluxo de camadas, stack identificada e diagrama de domínio/entidades em sintaxe **Mermaid.js**.
 
+### 6.3 Estrutura dos Prompts Implementados (`LlmPrompts`)
+Cada chamada envia `system` = prompt abaixo e `user` = `"ProjectAstSummary (JSON):\n" + <JSON do ProjectAstSummary>` (temperatura 0.2). Todos os prompts começam com um **bloco comum** (`COMMON`): papel de redator técnico sênior de APIs Spring Boot; descrição do JSON recebido; regras inviolláveis — usar **somente** dados do JSON, escrever "não informado" quando faltar informação, responder **apenas** Markdown, em pt-BR, com rotas/campos/anotações em `code`. Em seguida, a tarefa específica:
+
+| Prompt (`DocumentType`) | Estrutura exigida do documento |
+| :--- | :--- |
+| `API_REFERENCE` → `API-REFERENCE.md` | `# API Reference` + visão geral; seção `##` por controller (base path); por endpoint `### VERBO /caminho` com Javadoc, tabela de parâmetros (nome, tipo, origem, obrigatório), tabela de campos do body com validações Jakarta, JSON de exemplo de request/response (usa `responseBodyType` já desempacotado) e status HTTP; seção final `## Códigos de erro` (exceção → status sugerido → service/método de origem). |
+| `INTEGRATION_GUIDE` → `INTEGRATION-GUIDE.md` | `# Guia de Integração` + pré-requisitos e URL base; 2–5 casos de uso de negócio deduzidos da relação endpoints↔services; por caso: objetivo, passos numerados na ordem lógica, dependências de dados entre passos, `cURL` completo por passo e erros esperados; checklist final de boas práticas. |
+| `ARCHITECTURE_OVERVIEW` → `ARCHITECTURE.md` | `# Arquitetura` + stack (de `build.dependencies`); pacotes (`packages`) e responsabilidade das camadas; `flowchart LR` controller → services; `erDiagram` Mermaid das `@Entity` com relacionamentos; decisões/pontos de atenção observáveis. |
+
+**EC04 (retentativa):** `LlmPromptOrchestratorService` tenta até `retry.max-attempts` (3) vezes com espera `initial-delay-ms` (1000) dobrando a cada falha, **apenas** para erros retentáveis (HTTP 429, 5xx, falha de rede, resposta vazia). Esgotadas as tentativas (ou erro não retentável, ex. 401) lança `LlmGenerationException`; o `GenerationWorkflowService` marca o job como `FAILED` com `errorMessage` (sem a chave) e **preserva** os documentos já salvos.
+
+**Modo MOCK:** sem chave, `MockDocumentGenerator` produz os 3 documentos a partir da AST (tabelas de endpoints/DTOs, `cURL` com JSON de exemplo por tipo, `erDiagram` e `flowchart` reais), com aviso "modo MOCK" no topo.
+
 ---
 
 ## 7. Registro de Decisões Arquiteturais (ADRs)
 *(Agente: Sempre que tomar uma decisão de implementação importante, adicione um novo bloco `ADR-00X` abaixo)*
+
+### ADR-006: Ingestão do GitHub via zipball, extração síncrona e geração assíncrona, sem dependências novas
+* **Data:** 2026-10-29
+* **Status:** Aceito
+* **Decisão:**
+  1. O `GithubTarballInMemoryService` (nome mantido do plano) usa o endpoint `/zipball` da API do GitHub e `ZipInputStream` do JDK em vez de tarball + `commons-compress`, evitando nova dependência; tudo em `InputStream`/`Map<String,String>` (Zero-Retention). Arquivos > 1 MB são ignorados e o total é limitado a 50 MB.
+  2. A AST é extraída **sincronamente** em `POST` (rápido, e permite responder `422` no EC01); só o `ProjectAstSummary` (sem código-fonte) vai para a tarefa assíncrona (`TaskExecutor generationExecutor`, RNF03). O cliente faz polling em `GET /{jobId}`.
+  3. Retentativa (EC04) implementada manualmente (loop com backoff exponencial) em vez de Spring Retry, por ser simples e testável; o executor é injetável para testes síncronos.
+  4. Cliente LLM padrão fala o protocolo OpenAI Chat Completions (`baseUrl` configurável, o que cobre provedores compatíveis); sem chave → modo MOCK determinístico.
+  5. `GET /history` substitui `GET /api/v1/generations` do plano (conflito com `/{jobId}` evitado por rota literal).
+* **Consequências:** Provedores com API própria (Anthropic/Gemini nativa) exigem nova implementação de `LlmClient`. RNF02 (chunking por > 60.000 tokens) **não** foi implementado nesta missão. O estado `PENDING` é transitório e não aparece no fluxo normal (o job nasce em `PARSING_AST`).
 
 ### ADR-005: Compatibilidade de build com JDK 23 local (target Java 21)
 * **Data:** 2026-10-23
@@ -198,6 +299,18 @@ erDiagram
 
 ## 8. Changelog Técnico de Implementação (Histórico Contínuo)
 *(Agente: Adicione sempre uma nova entrada no TOPO desta lista a cada missão ou alteração concluída)*
+
+### [Missão 2] — Ingestão em RAM, Orquestração LLM (3 prompts) e API REST
+* **Data:** 2026-10-29
+* **Arquivos Criados:**
+  * `llm/`: `LlmClient`, `OpenAiCompatibleLlmClient`, `LlmClientConfig`, `LlmProperties`, `LlmPrompts`, `MockDocumentGenerator`, `LlmApiException`, `LlmGenerationException`
+  * `service/`: `GithubTarballInMemoryService`, `GithubIngestionException`, `LlmPromptOrchestratorService`, `GenerationWorkflowService`
+  * `controller/`: `GenerationController`, `GlobalExceptionHandler`, `JobNotFoundException`, `controller/dto/*` (6 records)
+  * `config/CorsConfig`
+  * Testes: `LlmPromptOrchestratorServiceTest`, `OpenAiCompatibleLlmClientTest` (`MockRestServiceServer`), `GithubTarballInMemoryServiceTest` (inclui servidor HTTP local), `GenerationWorkflowServiceTest` (`@DataJpaTest`), `GenerationControllerTest` (`@WebMvcTest`), `GenerationFlowIntegrationTest` (`@SpringBootTest`, fluxo assíncrono em modo MOCK), fixture `testsupport/SampleProjects`
+* **Arquivos Modificados:** `SpringDocAiApplication` (`@ConfigurationPropertiesScan`), `application.yml` (bloco `springdocai.llm`), `DocumentType` (`fileName`), `ProjectAstSummary` + `JavaParserAstExtractorService` (campo `packages`).
+* **Resumo Técnico:** Ingestão em memória (zipball do GitHub / mapa de arquivos do upload), 3 prompts estruturados, BYOK via `X-LLM-API-Key` > `LLM_API_KEY` > modo MOCK, retentativa com backoff (EC04) preservando documentos já gerados, geração assíncrona com polling, CORS para `localhost:3000`. Ver ADR-006 e Seções 5/6.3.
+* **Verificação / Testes:** `mvnw clean test` → **BUILD SUCCESS**, `Tests run: 43, Failures: 0, Errors: 0` (8 AST + 3 repositório + 32 da Missão 2). Observação de ambiente: o sandbox do terminal do agente falhou ao iniciar (`CreateProcessSecurityEnvironment`), então o Maven foi executado fora do sandbox mediante aprovação. Não foi feito teste real contra a API de uma LLM nem contra o GitHub (apenas mocks/servidor local).
 
 ### [Missão 1 / Verificação] — Testes verdes e correção do annotationProcessorPaths
 * **Data:** 2026-10-23

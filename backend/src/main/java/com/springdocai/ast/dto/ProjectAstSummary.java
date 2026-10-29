@@ -12,7 +12,8 @@ public record ProjectAstSummary(
         List<TypeInfo> dtos,
         List<EntityInfo> entities,
         int totalEndpoints,
-        int classesAnalyzed) {
+        int classesAnalyzed,
+        List<String> packages) {
 
     /** Informações do manifesto de build (pom.xml / build.gradle). */
     public record BuildInfo(String buildTool, List<String> dependencies) {

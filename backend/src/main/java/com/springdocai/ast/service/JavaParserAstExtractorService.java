@@ -100,6 +100,7 @@ public class JavaParserAstExtractorService {
                 new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21));
 
         List<TypeDeclaration<?>> types = new ArrayList<>();
+        Set<String> packages = new java.util.TreeSet<>();
         String manifestName = null;
         String manifestContent = null;
 
@@ -113,6 +114,7 @@ public class JavaParserAstExtractorService {
                 ParseResult<CompilationUnit> result = parser.parse(content);
                 if (result.isSuccessful() && result.getResult().isPresent()) {
                     CompilationUnit cu = result.getResult().get();
+                    cu.getPackageDeclaration().ifPresent(p -> packages.add(p.getNameAsString()));
                     types.addAll(cu.findAll(ClassOrInterfaceDeclaration.class));
                     types.addAll(cu.findAll(RecordDeclaration.class));
                 }
@@ -189,7 +191,7 @@ public class JavaParserAstExtractorService {
 
         BuildInfo build = buildInfo(manifestName, manifestContent);
         return new ProjectAstSummary(build, controllers, services, dtos, entities,
-                totalEndpoints, types.size());
+                totalEndpoints, types.size(), new ArrayList<>(packages));
     }
 
     // ---------------------------------------------------------------- controllers
