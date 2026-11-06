@@ -19,7 +19,8 @@
 | **Missão 1: Fundação Backend, JPA Dual & Extrator AST** | `COMPLETED` | 2026-10-23 | `.\mvnw.cmd clean test`: 11 testes, 0 falhas — BUILD SUCCESS |
 | **Missão 2: Ingestão RAM, Orquestrador LLM & API REST** | `COMPLETED` | 2026-10-29 | `mvnw clean test`: 43 testes, 0 falhas — BUILD SUCCESS |
 | **Missão 3: Frontend Client-First (`shadcn/ui` + `JSZip`)** | `COMPLETED` | 2026-11-06 | `npm run build`: sem erros de TypeScript/lint — SUCCESS |
-| **Missão 4: Integração E2E & Validação no Browser** | `PENDING` | Aguardando execução | Pendente |
+| **Missão 4: Integração E2E & Validação no Browser** | `COMPLETED` (contratos/API validados; **sem** inspeção visual no browser — não é `VERIFIED_END_TO_END`) | 2026-11-06 | Fluxo real contra `localhost:8080` (upload + GitHub), CORS e contratos conferidos |
+| **MVP** | `CONTRACT_VERIFIED` (pendente: validação visual manual no browser) | 2026-11-06 | — |
 
 ---
 
@@ -317,6 +318,21 @@ Cada chamada envia `system` = prompt abaixo e `user` = `"ProjectAstSummary (JSON
 
 ## 8. Changelog Técnico de Implementação (Histórico Contínuo)
 *(Agente: Adicione sempre uma nova entrada no TOPO desta lista a cada missão ou alteração concluída)*
+
+### [Missão 4] — Validação integrada E2E e fechamento do MVP
+* **Data:** 2026-11-06
+* **Arquivos Criados:** `README.md` (raiz: problema, arquitetura AST Stateless, stack, como rodar, API, limitações).
+* **Arquivos Modificados:** `docs/SDD.md`. **Nenhum código de `/backend` ou `/frontend` precisou de correção.**
+* **Validação executada (backend real em `localhost:8080`, perfil `dev`/H2):**
+  * CORS: preflight `OPTIONS /upload` com `Origin: http://localhost:3000` e headers `content-type, x-llm-api-key` → `200` com `Access-Control-Allow-Origin: http://localhost:3000`, métodos `GET,POST,OPTIONS`; o `POST` real também devolve `Access-Control-Allow-Origin` e `Location`.
+  * `POST /upload` (projeto de exemplo, sem chave → modo MOCK) → `201`; `GET /{jobId}` → `COMPLETED`, `endpointsCount=2`, `classesAnalyzedCount=5` e 3 documentos (`API_REFERENCE`, `INTEGRATION_GUIDE`, `ARCHITECTURE_OVERVIEW`).
+  * `GET /history` → lista com o job; `GET /{uuid inexistente}` → `404`.
+  * `POST /github` com `spring-projects/spring-petclinic` (rede real) → `201`, `endpointsCount=17`, `classesAnalyzedCount=25`.
+  * Conferência de contrato: as chaves JSON retornadas (`id, projectName, sourceType, repositoryUrl, status, endpointsCount, classesAnalyzedCount, errorMessage, createdAt, completedAt, documents[docType,fileName,content]`) coincidem com os tipos de `frontend/src/lib/api-client.ts`; rotas e header `X-LLM-API-Key` idênticos.
+  * Frontend respondendo `HTTP 200` em `localhost:3000`.
+* **Não validado (limite desta execução):** o agente não dispõe de navegador integrado, então **não** foram inspecionados visualmente o Light Mode, o Modal BYOK, o Drawer de Histórico, a renderização Markdown/Mermaid das 3 abas nem o cálculo do `.zip` no cliente. Esses itens foram apenas revisados no código/contratos. Recomenda-se um teste manual antes de marcar o MVP como `VERIFIED_END_TO_END`.
+* **Observação:** um primeiro `curl` ao `/github` retornou `400 BAD_REQUEST` por escape de aspas no PowerShell (corpo malformado), não por defeito da API; repetido com o corpo em arquivo, retornou `201`.
+* **Fechamento das 4 missões:** Missão 1 (fundação/AST), 2 (ingestão/LLM/API), 3 (frontend) e 4 (integração) concluídas; MVP funcional no nível de API/contrato.
 
 ### [Missão 3] — Frontend Client-First (Next.js + shadcn/ui + JSZip)
 * **Data:** 2026-11-06
