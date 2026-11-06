@@ -18,7 +18,7 @@
 | **Planejamento & Especificação (`/docs`)** | `COMPLETED` | Setup Inicial | N/A |
 | **Missão 1: Fundação Backend, JPA Dual & Extrator AST** | `COMPLETED` | 2026-10-23 | `.\mvnw.cmd clean test`: 11 testes, 0 falhas — BUILD SUCCESS |
 | **Missão 2: Ingestão RAM, Orquestrador LLM & API REST** | `COMPLETED` | 2026-10-29 | `mvnw clean test`: 43 testes, 0 falhas — BUILD SUCCESS |
-| **Missão 3: Frontend Client-First (`shadcn/ui` + `JSZip`)** | `PENDING` | Aguardando execução | Pendente |
+| **Missão 3: Frontend Client-First (`shadcn/ui` + `JSZip`)** | `COMPLETED` | 2026-11-06 | `npm run build`: sem erros de TypeScript/lint — SUCCESS |
 | **Missão 4: Integração E2E & Validação no Browser** | `PENDING` | Aguardando execução | Pendente |
 
 ---
@@ -91,13 +91,25 @@ flowchart LR
 
 | Arquivo / Componente | Tipo | Responsabilidade Principal | Componentes `shadcn/ui` Usados | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| `src/lib/client-zip-filter.ts` | Utility (Client) | Descompacta `.zip` no browser via `JSZip` e filtra apenas `.java` e `pom.xml`/`build.gradle`. | N/A (`jszip`) | `PLANNED` |
-| `src/components/header-bar.tsx` | UI Component | Barra superior fixa com acesso ao Histórico e modal de chave BYOK. | `Button`, `Badge`, `Tooltip` | `PLANNED` |
-| `src/components/hero-extractor-card.tsx` | UI Component | Card principal com abas para URL do GitHub ou Dropzone `.zip` local. | `Card`, `Tabs`, `Input`, `Button`, `Alert` | `PLANNED` |
-| `src/components/ast-progress-stepper.tsx` | UI Component | Barra de progresso segmentada exibindo métricas da AST e status da LLM. | `Progress`, `Skeleton`, `Badge` | `PLANNED` |
-| `src/components/markdown-workspace-tabs.tsx` | UI Component | Visualizador em 3 abas dos arquivos `.md` com cópia e download de pacote `.zip`. | `Tabs`, `ScrollArea`, `Button`, `Sonner` | `PLANNED` |
-| `src/components/byok-settings-dialog.tsx` | UI Component | Modal para salvar API Key própria (OpenAI/Gemini) no `localStorage`. | `Dialog`, `Input`, `Button` | `PLANNED` |
-| `src/components/history-drawer.tsx` | UI Component | Gaveta lateral listando os últimos 20 jobs salvos no banco. | `Sheet`, `ScrollArea`, `Badge` | `PLANNED` |
+| `src/lib/client-zip-filter.ts` | Utility (Client) | Triagem 100% no navegador: `filterZipFile` (JSZip), `filterFileList` (`<input webkitdirectory>`) e `filterDroppedItems` (drag-and-drop de pasta/.zip). Mantém só `.java` relevantes (nome `*Controller/Service/Dto/Request/Response/Record/Entity/Model/Exception/Advice/Handler` **ou** conteúdo com `@RestController/@Controller/@Service/@Entity/@Document/@ControllerAdvice/@Data/@Value/record/jakarta.validation`) + o manifesto mais raso (`pom.xml`/`build.gradle[.kts]`). Descarta `src/test/`, `target/`, `build/`, `out/`, `node_modules/`, `.git/`, `.idea/`, `.gradle/`, `.env*`, binários/imagens e arquivos > 1 MB; remove a pasta raiz única do zip. Retorna `FilterResult` (`files`, `javaCount`, `manifest`, `discarded` por motivo, `categories`, `projectName`). | N/A (`jszip`) | `IMPLEMENTED` |
+| `src/lib/api-client.ts` | Utility (Client) | Cliente HTTP dos 4 endpoints (`createUploadGeneration`, `createGithubGeneration`, `getGeneration`, `getHistory`), tipos do contrato (Seção 5), `ApiError` e persistência BYOK em `localStorage` (`springdocai.byok`) enviada em `X-LLM-API-Key`. Base: `NEXT_PUBLIC_API_URL` (padrão `http://localhost:8080`). | N/A | `IMPLEMENTED` |
+| `src/lib/download-zip.ts` | Utility (Client) | Gera o pacote `.zip` com os `.md` no navegador (`JSZip`) e dispara o download. | N/A (`jszip`) | `IMPLEMENTED` |
+| `src/lib/sample-docs.ts` | Data | Exemplo estático dos 3 artefatos usado na seção de amostra. | N/A | `IMPLEMENTED` |
+| `src/lib/utils.ts` | Utility | `cn()` (`clsx` + `tailwind-merge`). | N/A | `IMPLEMENTED` |
+| `src/app/layout.tsx` / `page.tsx` / `globals.css` | App Router | Layout (fontes Inter + JetBrains Mono via `@fontsource-variable`, `Toaster`), página que compõe `GenerationApp` + seções, tokens de prosa Markdown. | `Sonner` | `IMPLEMENTED` |
+| `src/components/generation-app.tsx` | UI Container (Client) | Estado da geração: inicia upload/GitHub, faz *polling* (1,5 s) de `GET /{jobId}`, reabre jobs do histórico, exibe stepper + workspace; Hero com headline. | `Alert`, `Badge`, `Card`, `Tooltip` | `IMPLEMENTED` |
+| `src/components/header-bar.tsx` | UI Component | Barra fixa (64 px, `backdrop-blur`) com logo, âncoras, Histórico e BYOK. | `Badge` | `IMPLEMENTED` |
+| `src/components/hero-extractor-card.tsx` | UI Component | Input Card em 2 abas (URL GitHub validada ou Dropzone `.zip`/pasta com contador exato de `.java` prontas, categorias, descartes e alertas EC01) + 3 pílulas de exemplo. | `Card`, `Tabs`, `Input`, `Button`, `Alert`, `Badge`, `Tooltip` | `IMPLEMENTED` |
+| `src/components/ast-progress-stepper.tsx` | UI Component | Progresso em 4 passos (AST, 3 documentos), métricas de endpoints/classes e alerta de falha (EC04). | `Progress`, `Alert`, `Badge`, `Card` | `IMPLEMENTED` |
+| `src/components/markdown-workspace-tabs.tsx` | UI Component | 3 abas `.md`, alternância Preview/Raw, "Copiar Markdown" (tooltip "Copiado!"), "Baixar Pacote (.zip)", `Skeleton` enquanto gera. | `Tabs`, `ScrollArea`, `Button`, `Skeleton`, `Tooltip`, `Sonner` | `IMPLEMENTED` |
+| `src/components/markdown-viewer.tsx` / `mermaid-diagram.tsx` | UI Component | Renderização Markdown (`react-markdown` + `remark-gfm`); blocos ` ```mermaid ` viram SVG via `mermaid` (import dinâmico, `securityLevel: strict`, fallback para código). | — | `IMPLEMENTED` |
+| `src/components/byok-settings-dialog.tsx` | UI Component | Modal de provedor (OpenAI/Gemini/Outro) + API Key (`localStorage`). | `Dialog`, `Input`, `Button`, `Tooltip` | `IMPLEMENTED` |
+| `src/components/history-drawer.tsx` | UI Component | Gaveta lateral com `GET /history` (data, projeto, endpoints, status) e reabertura do job. | `Sheet`, `ScrollArea`, `Badge`, `Skeleton` | `IMPLEMENTED` |
+| `src/components/landing-sections.tsx` | UI Component | Seções estáticas: Comparativo (Swagger cru vs. contextual), Pipeline AST em 3 passos, Bloco de Privacidade (`Browser Filter → RAM Parser → Immediate Wipe`) e Footer. | `Card`, `Badge` | `IMPLEMENTED` |
+| `src/components/sample-preview-section.tsx` | UI Component | Preview interativo dos 3 artefatos de exemplo (janela estilo IDE) com Mermaid. | reutiliza o workspace | `IMPLEMENTED` |
+| `src/components/ui/*` | shadcn/ui | `button`, `badge` (inclui `HttpMethodBadge`), `card`, `input`, `tabs`, `dialog`, `sheet`, `scroll-area`, `progress`, `skeleton`, `tooltip`, `alert` (escritos à mão no padrão shadcn sobre Radix, com tokens do Design System). | Radix UI | `IMPLEMENTED` |
+
+> `Accordion` (inspeção da AST) não foi implementado: a API REST atual não expõe o `ProjectAstSummary`, apenas contagens.
 
 ---
 
@@ -250,6 +262,12 @@ Cada chamada envia `system` = prompt abaixo e `user` = `"ProjectAstSummary (JSON
 ## 7. Registro de Decisões Arquiteturais (ADRs)
 *(Agente: Sempre que tomar uma decisão de implementação importante, adicione um novo bloco `ADR-00X` abaixo)*
 
+### ADR-007: Frontend — Next 14, Tailwind 3, shadcn/ui manual e fontes locais
+* **Data:** 2026-11-06
+* **Status:** Aceito
+* **Decisão:** Next.js 14 (App Router) + Tailwind 3 (tokens em `tailwind.config.ts`) em vez de versões mais novas, por estabilidade com `next lint`. Componentes shadcn/ui escritos à mão (sem CLI interativa) sobre Radix. Fontes via `@fontsource-variable` (sem acesso à rede no build, ao contrário de `next/font/google`). A triagem usa heurística por nome **e** por conteúdo/anotações para não perder DTOs sem sufixo; a pasta raiz única do zip é removida para o backend ver `src/main/java/...`. Mermaid é carregado por import dinâmico com `securityLevel: strict`. A chave BYOK fica em `localStorage` e é enviada apenas ao backend configurado em `NEXT_PUBLIC_API_URL`.
+* **Consequências:** Heurística pode descartar classes de apoio irrelevantes à documentação (contadas como "irrelevantes"). Bundle da home ~237 kB por causa de `mermaid`/`react-markdown` (Mermaid só carrega quando há diagrama).
+
 ### ADR-006: Ingestão do GitHub via zipball, extração síncrona e geração assíncrona, sem dependências novas
 * **Data:** 2026-10-29
 * **Status:** Aceito
@@ -299,6 +317,13 @@ Cada chamada envia `system` = prompt abaixo e `user` = `"ProjectAstSummary (JSON
 
 ## 8. Changelog Técnico de Implementação (Histórico Contínuo)
 *(Agente: Adicione sempre uma nova entrada no TOPO desta lista a cada missão ou alteração concluída)*
+
+### [Missão 3] — Frontend Client-First (Next.js + shadcn/ui + JSZip)
+* **Data:** 2026-11-06
+* **Arquivos Criados (`/frontend`):** `package.json`, `tsconfig.json`, `next.config.mjs`, `postcss.config.mjs`, `tailwind.config.ts` (tokens do Design System: canvas `#FAFAFA`, surface `#FFFFFF`, ink `#09090B`, line `#E4E4E7`, primária `#18181B`, acento `#2563EB`, cores semânticas GET/POST/PUT/DELETE, radius 10/6/4 px, sombras `card`/`float`), `.eslintrc.json`, `.env.example`, `src/app/{layout,page}.tsx`, `globals.css`, `src/lib/{client-zip-filter,api-client,download-zip,sample-docs,utils}.ts`, componentes listados na Seção 3.2 (`generation-app`, `header-bar`, `hero-extractor-card`, `ast-progress-stepper`, `markdown-workspace-tabs`, `markdown-viewer`, `mermaid-diagram`, `byok-settings-dialog`, `history-drawer`, `landing-sections`, `sample-preview-section`, `ui/*` com 12 primitivos).
+* **Bibliotecas instaladas:** `next` 14.2.35, `react`/`react-dom` 18.3, `typescript`, `tailwindcss` 3.4 + `tailwindcss-animate`, `@radix-ui/react-{dialog,tabs,scroll-area,progress,tooltip,slot}`, `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react`, `jszip`, `sonner`, `react-markdown` + `remark-gfm`, `mermaid`, `@fontsource-variable/inter`, `@fontsource-variable/jetbrains-mono`, `eslint` + `eslint-config-next`.
+* **Resumo Técnico:** Landing Product-Led com as 7 seções da spec; triagem client-side (`client-zip-filter.ts`) com contador exato de classes `.java`; integração com os 4 endpoints reais; BYOK em `localStorage` → header `X-LLM-API-Key`; *polling* de job; workspace com Preview/Raw, copiar e `.zip` gerado no cliente; Mermaid renderizado no cliente. Ver ADR-007.
+* **Verificação / Testes:** `npm run build` → **sucesso** (compilação, lint e tipos). **Não** foram feitos testes automatizados de frontend nem verificação visual/E2E no navegador (escopo da Missão 4). Observações: o `npm` via PowerShell é bloqueado pela política de execução, então foi usado `npm.cmd`; `next` foi atualizado de 14.2.18 para 14.2.35 por aviso de vulnerabilidade.
 
 ### [Missão 2] — Ingestão em RAM, Orquestração LLM (3 prompts) e API REST
 * **Data:** 2026-10-29

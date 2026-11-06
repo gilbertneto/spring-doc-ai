@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+  }
+  ::selection {
+    background: #bfdbfe;
+  }
+  .num {
+    @apply font-mono;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Prosa do Markdown renderizado */
+.md-prose {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: #09090b;
+}
+.md-prose h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 1rem; }
+.md-prose h2 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; margin: 2rem 0 0.75rem; padding-top: 1rem; border-top: 1px solid #e4e4e7; }
+.md-prose h3 { font-size: 1.0625rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+.md-prose p { margin: 0.5rem 0; }
+.md-prose ul { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
+.md-prose ol { list-style: decimal; padding-left: 1.25rem; margin: 0.5rem 0; }
+.md-prose a { color: #2563eb; text-decoration: underline; }
+.md-prose blockquote { border-left: 3px solid #bfdbfe; background: #eff6ff; padding: 0.5rem 0.75rem; border-radius: 6px; color: #52525b; margin: 0.75rem 0; }
+.md-prose code { font-family: "JetBrains Mono Variable", ui-monospace, monospace; font-size: 0.8125rem; background: #f4f4f5; padding: 0.1rem 0.35rem; border-radius: 4px; }
+.md-prose pre { background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 6px; padding: 0.875rem 1rem; overflow-x: auto; margin: 0.75rem 0; }
+.md-prose pre code { background: transparent; padding: 0; font-size: 0.8125rem; line-height: 1.6; }
+.md-prose table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.875rem; display: block; overflow-x: auto; }
+.md-prose th { background: #f4f4f5; text-align: left; font-weight: 600; padding: 0.5rem 0.75rem; border: 1px solid #e4e4e7; }
+.md-prose td { padding: 0.5rem 0.75rem; border: 1px solid #e4e4e7; vertical-align: top; }
+
